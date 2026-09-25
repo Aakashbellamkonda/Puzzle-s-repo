@@ -1,70 +1,94 @@
 package com.example
 
-import com.example.data.model.LevelData
-import com.example.data.model.TileType
-import com.example.data.model.WinCondition
-import com.example.ui.game.Direction
-import com.example.ui.game.GameEngine
-import com.example.ui.game.GridPos
+import com.example.data.jigsaw.EdgeType
+import com.example.data.jigsaw.JigsawCodec
+import com.example.data.jigsaw.JigsawCutStyle
+import com.example.data.jigsaw.JigsawLevel
+import com.example.data.jigsaw.JigsawPathGenerator
+import com.example.data.jigsaw.JigsawWinCondition
+import com.example.data.model.Difficulty
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ExampleUnitTest {
 
     @Test
-    fun testLevelValidation() {
-        val invalidLevel = LevelData(
-            title = "Invalid Test",
-            width = 4,
-            height = 4,
-            grid = List(16) { TileType.EMPTY }
+    fun testJigsawEdgeGenerationInterlocking() {
+        val rows = 3
+        val cols = 4
+        val edges = JigsawPathGenerator.generatePieceEdges(rows, cols, seed = 42L)
+
+        assertEquals(rows * cols, edges.size)
+
+        for (r in 0 until rows) {
+            for (c in 0 until cols) {
+                val idx = r * cols + c
+                val piece = edges[idx]
+
+                // Outer border boundaries must be FLAT
+                if (r == 0) assertEquals(EdgeType.FLAT, piece.top)
+                if (r == rows - 1) assertEquals(EdgeType.FLAT, piece.bottom)
+                if (c == 0) assertEquals(EdgeType.FLAT, piece.left)
+                if (c == cols - 1) assertEquals(EdgeType.FLAT, piece.right)
+
+                // Internal horizontal connections must mate (one TAB_OUT, one TAB_IN)
+                if (r < rows - 1) {
+                    val bottomPiece = edges[(r + 1) * cols + c]
+                    val mates = (piece.bottom == EdgeType.TAB_OUT && bottomPiece.top == EdgeType.TAB_IN) ||
+                        (piece.bottom == EdgeType.TAB_IN && bottomPiece.top == EdgeType.TAB_OUT)
+                    assertTrue("Vertical adjacent pieces must interlock", mates)
+                }
+
+                // Internal vertical connections must mate
+                if (c < cols - 1) {
+                    val rightPiece = edges[r * cols + (c + 1)]
+                    val mates = (piece.right == EdgeType.TAB_OUT && rightPiece.left == EdgeType.TAB_IN) ||
+                        (piece.right == EdgeType.TAB_IN && rightPiece.left == EdgeType.TAB_OUT)
+                    assertTrue("Horizontal adjacent pieces must interlock", mates)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun testJigsawCodecRoundTrip() {
+        val original = JigsawLevel(
+            title = "Enchanted Waterfall",
+            author = "Marina",
+            imageKey = "sunset_mountains",
+            rows = 4,
+            cols = 4,
+            edgeSeed = 999L,
+            cutStyle = JigsawCutStyle.CLASSIC_JIGSAW,
+            winCondition = JigsawWinCondition.TIME_ATTACK,
+            timeLimitSeconds = 120,
+            parTimeSeconds = 75,
+            rotatePieces = true,
+            difficulty = Difficulty.HARD,
+            hint = "Look for the red sunset sky first"
         )
-        val errors = invalidLevel.validate()
-        assertTrue("Should report missing player spawn", errors.any { it.contains("Player Start") })
 
-        val validLevel = invalidLevel
-            .withTile(0, 0, TileType.PLAYER_SPAWN)
-            .withTile(3, 3, TileType.GOAL_EXIT)
-        assertTrue("Should be valid", validLevel.validate().isEmpty())
-    }
+        val code = JigsawCodec.encode(original)
+        assertTrue(code.startsWith("JIGSAW:1:"))
 
-    @Test
-    fun testGameEngineCratePushAndWin() {
-        val level = LevelData(
-            width = 5,
-            height = 5,
-            winCondition = WinCondition.PUSH_ALL_TARGETS
-        ).withTile(1, 2, TileType.PLAYER_SPAWN)
-            .withTile(2, 2, TileType.CRATE)
-            .withTile(3, 2, TileType.TARGET_PEDESTAL)
+        val decodedResult = JigsawCodec.decode(code)
+        assertTrue(decodedResult.isSuccess)
+        val decoded = decodedResult.getOrThrow()
 
-        var state = GameEngine.initialize(level)
-        assertEquals(GridPos(1, 2), state.playerPos)
-        assertEquals(setOf(GridPos(2, 2)), state.crates)
-        assertFalse(state.isWon)
-
-        state = GameEngine.step(state, Direction.RIGHT)
-        assertEquals(GridPos(2, 2), state.playerPos)
-        assertEquals(setOf(GridPos(3, 2)), state.crates)
-        assertEquals(1, state.moves)
-        assertTrue("Player should have won by pushing crate onto target pad", state.isWon)
-    }
-
-    @Test
-    fun testGameEngineIceSlide() {
-        val level = LevelData(
-            width = 6,
-            height = 3,
-            winCondition = WinCondition.REACH_EXIT
-        ).withTile(1, 1, TileType.PLAYER_SPAWN)
-            .withTile(2, 1, TileType.ICE)
-            .withTile(3, 1, TileType.ICE)
-            .withTile(4, 1, TileType.WALL)
-
-        var state = GameEngine.initialize(level)
-        state = GameEngine.step(state, Direction.RIGHT)
-        assertEquals(GridPos(3, 1), state.playerPos)
+        assertEquals(original.title, decoded.title)
+        assertEquals(original.author, decoded.author)
+        assertEquals(original.imageKey, decoded.imageKey)
+        assertEquals(original.rows, decoded.rows)
+        assertEquals(original.cols, decoded.cols)
+        assertEquals(original.edgeSeed, decoded.edgeSeed)
+        assertEquals(original.cutStyle, decoded.cutStyle)
+        assertEquals(original.winCondition, decoded.winCondition)
+        assertEquals(original.timeLimitSeconds, decoded.timeLimitSeconds)
+        assertEquals(original.parTimeSeconds, decoded.parTimeSeconds)
+        assertEquals(original.rotatePieces, decoded.rotatePieces)
+        assertEquals(original.difficulty, decoded.difficulty)
+        assertEquals(original.hint, decoded.hint)
     }
 }

@@ -19,15 +19,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.data.db.LevelRepository
 import com.example.data.db.PuzzleDatabase
-import com.example.ui.editor.LevelEditorScreen
-import com.example.ui.editor.LevelEditorViewModel
-import com.example.ui.game.GameScreen
-import com.example.ui.game.GameViewModel
-import com.example.ui.hub.LevelHubScreen
-import com.example.ui.hub.LevelHubViewModel
+import com.example.data.jigsaw.JigsawRepository
+import com.example.ui.jigsaw.JigsawEditorScreen
+import com.example.ui.jigsaw.JigsawEditorViewModel
+import com.example.ui.jigsaw.JigsawHubScreen
+import com.example.ui.jigsaw.JigsawHubViewModel
+import com.example.ui.jigsaw.JigsawPlayScreen
+import com.example.ui.jigsaw.JigsawPlayViewModel
 import com.example.ui.navigation.Screen
 import com.example.ui.theme.MyApplicationTheme
 
@@ -37,12 +36,12 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         val database = PuzzleDatabase.getDatabase(applicationContext)
-        val repository = LevelRepository(database.levelDao())
+        val jigsawRepository = JigsawRepository(database.jigsawLevelDao())
 
         setContent {
             MyApplicationTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    PuzzleCraftApp(repository = repository)
+                    JigsawApp(repository = jigsawRepository)
                 }
             }
         }
@@ -50,9 +49,9 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun PuzzleCraftApp(repository: LevelRepository) {
+fun JigsawApp(repository: JigsawRepository) {
     val context = LocalContext.current
-    var currentScreen by remember { mutableStateOf<Screen>(Screen.Hub) }
+    var currentScreen by remember { mutableStateOf<Screen>(Screen.JigsawHub) }
     val backStack = remember { mutableStateListOf<Screen>() }
 
     fun navigateTo(screen: Screen) {
@@ -64,46 +63,49 @@ fun PuzzleCraftApp(repository: LevelRepository) {
         if (backStack.isNotEmpty()) {
             currentScreen = backStack.removeAt(backStack.lastIndex)
         } else {
-            currentScreen = Screen.Hub
+            currentScreen = Screen.JigsawHub
         }
     }
 
-    BackHandler(enabled = currentScreen !is Screen.Hub) {
+    BackHandler(enabled = currentScreen !is Screen.JigsawHub) {
         navigateBack()
     }
 
     AnimatedContent(
         targetState = currentScreen,
         transitionSpec = { fadeIn() togetherWith fadeOut() },
-        label = "ScreenTransition"
+        label = "JigsawScreenTransition"
     ) { screen ->
         when (screen) {
-            is Screen.Hub -> {
-                val hubViewModel = remember { LevelHubViewModel(repository) }
-                LevelHubScreen(
+            is Screen.JigsawHub -> {
+                val hubViewModel = remember { JigsawHubViewModel(repository) }
+                JigsawHubScreen(
                     viewModel = hubViewModel,
-                    onPlayLevel = { levelId -> navigateTo(Screen.Game(levelId)) },
-                    onEditLevel = { levelId -> navigateTo(Screen.Editor(levelId)) },
-                    onCreateNewLevel = { navigateTo(Screen.Editor(0L)) }
+                    onPlayLevel = { levelId -> navigateTo(Screen.JigsawPlay(levelId)) },
+                    onEditLevel = { levelId -> navigateTo(Screen.JigsawEditor(levelId)) },
+                    onCreateNewLevel = { navigateTo(Screen.JigsawEditor(0L)) }
                 )
             }
-            is Screen.Editor -> {
+            is Screen.JigsawEditor -> {
                 val editorViewModel = remember(screen.levelId) {
-                    LevelEditorViewModel(repository, screen.levelId)
+                    JigsawEditorViewModel(repository, screen.levelId)
                 }
-                LevelEditorScreen(
+                JigsawEditorScreen(
                     viewModel = editorViewModel,
-                    onNavigateBack = { navigateBack() }
+                    onNavigateBack = { navigateBack() },
+                    onTestPlay = { testLevel ->
+                        navigateTo(Screen.JigsawPlay(levelId = 0L, testLevel = testLevel))
+                    }
                 )
             }
-            is Screen.Game -> {
-                val gameViewModel = remember(screen.levelId) {
-                    GameViewModel(repository, context, screen.levelId)
+            is Screen.JigsawPlay -> {
+                val playViewModel = remember(screen.levelId, screen.testLevel) {
+                    JigsawPlayViewModel(repository, context, screen.levelId, screen.testLevel)
                 }
-                GameScreen(
-                    viewModel = gameViewModel,
+                JigsawPlayScreen(
+                    viewModel = playViewModel,
                     onNavigateBack = { navigateBack() },
-                    onOpenEditor = { levelId -> navigateTo(Screen.Editor(levelId)) }
+                    onOpenEditor = { id -> navigateTo(Screen.JigsawEditor(id)) }
                 )
             }
         }
