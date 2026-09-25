@@ -1,0 +1,6 @@
+{
+  "name": "PuzzleCraft Studio",
+  "description": "Design, play, and share custom puzzle levels with an intuitive grid editor, unique puzzle mechanics, win conditions, and community sharing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
